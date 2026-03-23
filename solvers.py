@@ -47,7 +47,7 @@ class StochasticNoise:
         noise_hat = torch.complex(real, imag) * amplitude.unsqueeze(0).unsqueeze(0)
 
         # inverse FFT -> physical space noise field 
-        noise_field = torch.fft.ifft(noise_hat, dim = 1).real
+        noise_field = torch.fft.ifft(noise_hat, dim=-1).real
 
         # renormalize so variance matches sigma^2
         noise_field = noise_field / (noise_field.std() + 1e-8) * self.sigma
@@ -56,7 +56,7 @@ class StochasticNoise:
     
     def sample_2d(self, n_samples: int, n_timesteps: int, Nx: int, Ny: int, dx: float, dy: float):
         """
-        noise relization for 2D problems
+        noise realization for 2D problems
 
         returns:
             noise_field: (n_samples, n_timesteps, Nx, Ny) tensor
@@ -64,7 +64,7 @@ class StochasticNoise:
 
         # 2D wavenumber grid
         kx = torch.fft.fftfreq(Nx, d = dx) * 2 * np.pi
-        ky = torch.fft.fftfreq(Nx, d = dy) * 2 * np.pi
+        ky = torch.fft.fftfreq(Ny, d = dy) * 2 * np.pi
         kx_grid, ky_grid = torch.meshgrid(kx, ky, indexing='ij')
         k_mag = torch.sqrt(kx_grid**2 + ky_grid**2)
 
@@ -120,7 +120,7 @@ class StochasticBurgers1D:
         self.x = torch.linspace(0, lx * (1 - 1/nx), nx, dtype=torch.float64)
 
         # wavenumbers
-        self.k = torch.fft.fftfreq(nx, d=self.dx).to(torch.float64) * 2 * np.pi    #rad/m)
+        self.k = torch.fft.fftfreq(nx, d=self.dx).to(torch.float64) * 2 * np.pi    # rad/m
 
         self.k_sq = self.k**2 
         self.ik = 1j * self.k   # i*k for spectral derivatives (in fourier space, derivatives become multiplication)
@@ -128,12 +128,12 @@ class StochasticBurgers1D:
 
         # dealiasing mask (2/3)
         # used to prevent nonlinear aliasing error from u^2 term
-        self.dealis_mask = torch.ones(nx, dytpe = torch.float64)
+        self.dealias_mask = torch.ones(nx, dtype = torch.float64)
         k_max = nx // 3
-        self.dealis_mask[k_max:-k_max] = 0.0
+        self.dealias_mask[k_max:-k_max] = 0.0
 
         # integrating factor for diffusion
-        self.decay = torch.exp(self.nu * self.k_sq * self.dt)
+        self.decay = torch.exp(-self.nu * self.k_sq * self.dt)
 
     def _nonlinear_term(self, u_hat):
         """
@@ -144,8 +144,8 @@ class StochasticBurgers1D:
 
         this nonlinear term causes mode interactions in Fourier space 
             - mode interactions: transfer of energy between different spatial frequencies
-        at high frequencies, interactions produce frequenceis too large for discrete grid representation
-        these unresolved frequencies are foldered back into lower ones, which create aliasing errors
+        at high frequencies, interactions produce frequencies too large for discrete grid representation
+        these unresolved frequencies are folded back into lower ones, which create aliasing errors
 
         spectral methods use 2/3 rule, which reduce such aliasing errors
     
@@ -159,7 +159,7 @@ class StochasticBurgers1D:
         u_sq_hat = torch.fft.fft(u**2)                          # nonlinear product back to fourier
         return -0.5 * self.ik * u_sq_hat
     
-    def generate_initial_conditions(self, n_samples: int, seed: int = None):
+    def generate_initial_condition(self, n_samples: int, seed: int = None):
         """
         generate smooth random intial conditions using low-pass filtered random fourier coefficients
         
@@ -175,9 +175,9 @@ class StochasticBurgers1D:
         if seed is not None:
             rng.manual_seed(seed)
         
-        n_active = self.Nx // 4         # only populate low-freq modes
-        real = torch.randn(n_samples, self.Nx, generator=rng, dtype=torch.float64)
-        imag = torch.randn(n_samples, self.Nx, generator=rng, dtype=torch.float64)
+        n_active = self.nx // 4         # only populate low-freq modes
+        real = torch.randn(n_samples, self.nx, generator=rng, dtype=torch.float64)
+        imag = torch.randn(n_samples, self.nx, generator=rng, dtype=torch.float64)
         u0_hat = torch.complex(real, imag)
 
         # zero high-frequency modes for smoothness
@@ -211,7 +211,7 @@ class StochasticBurgers1D:
         u_hat = torch.fft.fft(u0)       # converts IC from physical to fourier space 
 
         # time loop
-        for n in range(self.Nt):
+        for n in range(self.nt):
             noise_hat = torch.fft.fft(noise_field[n].to(torch.complex128))      # transform noise into Fourier space
 
             # heun predictor
@@ -237,13 +237,13 @@ class StochasticBurgers1D:
 
 class StochasticNavierStokes2D: 
     """
-    pseudo-spectral solver for 2D stochastic navier-stokes equations in voriticity-streamfunction form 
+    pseudo-spectral solver for 2D stochastic navier-stokes equations in vorticity-streamfunction form
 
     take the curl of the 2D momentum equation:
         - eliminates pressure entirely
-        - reuduces to a single scalar equation for vorticity
+        - reduces to a single scalar equation for vorticity
 
-    d(omega)/dt = J(psi, omega) = nu * Lap(omega) + curf(f) 
+    d(omega)/dt + J(psi, omega) = nu * Lap(omega) + curl(f)
 
     omega = dv/dx - du/dy           (scalar vorticity in 2D)
     psi = streamfunction            (defined by Lap(psi) = -omega)
@@ -252,13 +252,13 @@ class StochasticNavierStokes2D:
     J(psi, omega) = d(psi)/dx * d(omega)/dy - d(psi)/dy * d(omega)/dx
 
     velocity recovered from streamfunction
-    u = d(psi)dy
+    u = d(psi)/dy
     v = -d(psi)/dx     
 
     this form was chosen for convenience: 
         - pressure is gone, meaning no poisson equation to solve at each step
         - incompressibility (div(u) = 0) is automatically satisfied
-        - scalar equation in 2D (voriticity is a scalar, not vector)
+        - scalar equation in 2D (vorticity is a scalar, not vector)
 
     time integration: IMEX with crank-nicolson (diffusion) + adams-bashforth (advection)
     """
@@ -317,7 +317,7 @@ class StochasticNavierStokes2D:
 
     def _omega_to_velocity(self, omega_hat):
         """
-        recover velocity field from voriticity via streamfunction
+        recover velocity field from vorticity via streamfunction
 
         solve poisson equation for streamfunction
             Lap(psi) = -omega  =>  -|k|^2 * psi_hat = -omega_hat
@@ -327,7 +327,7 @@ class StochasticNavierStokes2D:
             u = dpsi/dy  =>  u_hat = i*ky * psi_hat
             v = -dpsi/dx =>  v_hat = -i*kx * psi_hat
         """
-        psi_hat = -omega_hat * self.k_sq_inv
+        psi_hat = omega_hat * self.k_sq_inv
         u_hat = self.iky * psi_hat                   #dpsi/dy
         v_hat = -self.ikx * psi_hat                  #-dpsi/dx
         return u_hat, v_hat
@@ -342,10 +342,10 @@ class StochasticNavierStokes2D:
             3. multiply in physical space
             4. FFT back
         """
-        # velocity from voriticity: 
+        # velocity from vorticity:
         u_hat, v_hat = self._omega_to_velocity(omega_hat)
 
-        # voritcity gradients in fourier space
+        # vorticity gradients in fourier space
         dwdx_hat = self.ikx * omega_hat
         dwdy_hat = self.iky * omega_hat
 

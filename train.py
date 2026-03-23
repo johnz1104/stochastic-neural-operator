@@ -10,10 +10,10 @@ class SPDEDataset(Dataset):
     """
     pytorch dataset for SPDE neural operator training
         - takes raw PDE data, normalizes it, and returns training samples
-        (one training sample is one example that the nmodel learns from)
+        (one training sample is one example that the model learns from)
 
-    each sample is a typle: (input_tensor, output_tensor)
-        - input_tensor has channels [initial conditions, noise, coordiantes]
+    each sample is a tuple: (input_tensor, output_tensor)
+        - input_tensor has channels [initial conditions, noise, coordinates]
         - output_tensor is the solution field
     """
 
@@ -147,7 +147,7 @@ def make_dataloaders(train_data, val_data, test_data, spatial_dim, x_grid, y_gri
 # LOSS FUNCTIONS
 class RelativeL2Loss:
     """
-    relative L2 error (nomralized mean-square error (MSE))
+    relative L2 error (normalized mean-square error (MSE))
 
     L = mean_i( ||pred_i - true_i||_2 / ||true_i||_2 )
  
@@ -268,10 +268,10 @@ class Trainer:
         self.warmup_epochs = warmup_epochs
         self.grad_clip = grad_clip
         
-        # loss function (weighted combinatino of pointwise + spectral + moment)
+        # loss function (weighted combination of pointwise + spectral + moment)
         self.criterion = CombinedLoss(spatial_dim)
 
-        # Adam = adaptive moemnt estimation 
+        # Adam = adaptive moment estimation
         # AdamW = Adam with weight decay
 
         # AdamW optimizer:
@@ -379,7 +379,7 @@ class Trainer:
             1. iterate through all training batches (gradient descent steps)
             2. evaluate on validation set (no learning, just measuring)
             3. update learning rate schedule
-            4. save th mode if its the best so far
+            4. save the model if it's the best so far
         """
         print(f"training on {self.device} for {self.n_epochs} epochs")
         print(f"  train batches: {len(train_loader)}, val batches: {len(val_loader)}")
@@ -435,10 +435,10 @@ class Trainer:
 # EVALUATION
 class Evaluator: 
     """
-    evaluation metrics for a trainsed neural operator
+    evaluation metrics for a trained neural operator
 
-    computes both per-realization accuracy and ensemble statistics 
-        - assesses whether model captures the statistical strcuture of SPDE solution process
+    computes both per-realization accuracy and ensemble statistics
+        - assesses whether model captures the statistical structure of SPDE solution process
     """
     def __init__(self, model, spatial_dim: int, device: str = 'cpu'):
         self.model = model.to(device)
@@ -450,8 +450,8 @@ class Evaluator:
         """
         run full evaluation on test set
 
-        per-relization: relative L2 error for each sample
-        eensemble: mean field error, variance field error, spectrum error
+        per-realization: relative L2 error for each sample
+        ensemble: mean field error, variance field error, spectrum error
         """
         all_preds = []
         all_targets = []

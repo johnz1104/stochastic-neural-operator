@@ -8,7 +8,7 @@ def build_input_tensor1D(u0, noise_spatial, x_grid: torch.Tensor):
     assemble input tensor for 1D problems by stacking channels
 
     channels: 
-        0: intiail condition u0(x)
+        0: initial condition u0(x)
         1: time-averaged noise field xi(x)
         2: spatial coordinate x (normalized to [0,1])
 
@@ -96,7 +96,7 @@ class SpectralConv1d(nn.Module):
         spectral layer: 
             - takes signal and turns into Fourier modes
             - learns how to modify low-frequency modes
-            - throws away the rest (negative frequencies) 
+            - zeroes out high-frequency modes above n_modes
             - turns result back to physical space
         
         input:
@@ -108,12 +108,12 @@ class SpectralConv1d(nn.Module):
 
         # to fourier space (only keeps positive frequencies)
         # this results in fourier dimension becoming nx // 2 + 1
-        x_ft = torch.fft.rfft(x, dim=1)
+        x_ft = torch.fft.rfft(x, dim=-1)
 
         # allocate output in fourier space
         out_ft = torch.zeros(batch, self.out_channels, nx // 2 + 1, dtype=torch.cfloat, device = x.device)
 
-        # multiply low-freq by leanred complex weights
+        # multiply low-freq by learned complex weights
         #einsum: batch(b), in_channel(i), mode(m) x in_channel(i), out_channel(o), mode(m)
         w = torch.view_as_complex(self.weight)
         out_ft[:, :, :self.n_modes] = torch.einsum('bim,iom->bom', x_ft[:, :, :self.n_modes], w)
@@ -128,7 +128,7 @@ class SpectralConv2d(nn.Module):
 
     same as 1D, except 2D real FFT has different structure:
         - kx runs over all modes 
-        - ky only covers positive frequencies (since input is real, negative ky modes are comjugate symmetric)
+        - ky only covers positive frequencies (since input is real, negative ky modes are conjugate symmetric)
     
     we learn two weight tensors for "corners" of 2D FFT output: 
         - weight1: low kx, low ky (positive kx modes)
@@ -291,7 +291,7 @@ class FourierNeuralOperator(nn.Module):
         
     def forward(self, x):
         """
-        foward pass through the full operator
+        forward pass through the full operator
             - takes input fields and maps them to a higher-dimensional space using a nonlinear map
                 - creates a feature space where PDE mapping/complex transformations become easier to represent
             - evolve features with global (Fourier) operators, 
@@ -323,7 +323,7 @@ class FourierNeuralOperator(nn.Module):
         for layer in self.fourier_layers:
             h = layer(h)            # (batch, width, *spatial) 
 
-        out = self.projection(h)    # (batch, width, *spatial)
+        out = self.projection(h)    # (batch, out_channels, *spatial)
 
         return out
 
