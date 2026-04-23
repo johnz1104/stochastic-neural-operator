@@ -61,5 +61,33 @@ The full 2D incompressible Navier-Stokes equations reformulated via the curl. Wo
 fno.py      - FNO architecture (spectral convolutions, Fourier layers, full model)
 solvers.py  - pseudo-spectral PDE solvers, noise generation, dataset generation
 train.py    - dataset/dataloader, loss functions, trainer, evaluator
-main.py     
+main.py     - CLI orchestrator for data generation and model training
+
+## Usage
+
+You can use `main.py` to generate data and train the model for either the 1D Burgers or 2D Navier-Stokes equations.
+
+### Data Generation
+
+Generate a dataset of SPDE solution pairs (saved as `.npy` files):
+
+```bash
+# Generate 1000 samples for the 1D Burgers equation
+python main.py --pde burgers --mode generate --num_samples 1000
+
+# Generate 500 samples for the 2D Navier-Stokes equation
+python main.py --pde ns --mode generate --num_samples 500
+```
+
+### Model Training
+
+Train the Fourier Neural Operator on the generated datasets:
+
+```bash
+# Train on the Burgers dataset for 100 epochs
+python main.py --pde burgers --mode train --epochs 100 --batch_size 32
+
+# Train on the Navier-Stokes dataset for 200 epochs
+python main.py --pde ns --mode train --epochs 200 --batch_size 16
+```
 ```
